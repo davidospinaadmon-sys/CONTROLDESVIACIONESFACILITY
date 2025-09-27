@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Notificación de Desviaciones</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background:#f4f7fa; color:#333; }
+    h2, h3 { color:#005a9c; }
+    form, section { background: #fff; margin: 20px; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    label { display:block; margin-top:12px; font-weight:600; }
+    input, select, textarea, button { width:100%; padding:10px; margin-top:6px; border:1px solid #ccc; border-radius:6px; box-sizing:border-box; }
+    button { background:#0078d4; color:white; font-weight:bold; border:none; cursor:pointer; }
+    button:hover { background:#005a9c; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+    th { background:#0078d4; color:white; }
+    td, th { border:1px solid #ddd; padding:6px; text-align:center; }
+    .alerta { background-color:#ffcccc !important; font-weight:bold; }
+    .resumen { background:#e6f4ff; padding:15px; border-left:5px solid #0078d4; }
+    canvas { max-width:600px; margin-top:20px; }
+    .hidden { display:none; }
+    .matriz { margin-top:20px; font-size:13px; width:auto; margin-left:auto; margin-right:auto; }
+    .matriz td, .matriz th { padding:4px 8px; }
+
+    /* Colores por código */
+    .ENG { background-color:#d5e8d4; }
+    .PEN { background-color:#ffe6cc; }
+    .CER { background-color:#f8cecc; }
+    .AVA { background-color:#dae8fc; }
+    .SIN { background-color:#f5f5f5; }
+  </style>
+</head>
+<body>
+
+<h2 style="text-align:center; margin-top:20px;">Notificación de Desviaciones</h2>
+
+<!-- FORMULARIO -->
+<form id="formDesviacion">
+  <label>Fecha de Detección:</label>
+  <input type="date" id="fechaDeteccion" required>
+
+  <label>Área Responsable:</label>
+  <select id="areaResponsable" required>
+    <option value="">Seleccione...</option>
+    <option>ACTIVOS</option>
+    <option>COMERCIALIZADORA DE ENERGIA</option>
+    <option>PLANEACION Y GESTION DE RECURSOS</option>
+    <option>EJECUCION MANTENIMIENTO</option>
+    <option>PROYECTOS</option>
+    <option>INDUSTRIA</option>
+    <option>SERVICIOS GENERALES</option>
+  </select>
+
+  <label>Desviación Identificada:</label>
+  <input type="text" id="desviacion" required>
+
+  <label>Descripción Detallada:</label>
+  <textarea id="descripcion" rows="3" required></textarea>
+
+  <label>Recomendación:</label>
+  <textarea id="recomendacion" rows="2" required></textarea>
+
+  <label>Ponderación de Riesgo:</label>
+  <select id="riesgo" required>
+    <option value="">Seleccione...</option>
+    <option>BAJO</option>
+    <option>MEDIO</option>
+    <option>ALTO</option>
+  </select>
+
+  <label>Responsable del Compromiso:</label>
+  <input type="text" id="responsable" required>
+
+  <label>Fecha de Notificación:</label>
+  <input type="date" id="fechaNotificacion" required>
+
+  <label>Evidencia de Cierre (imagen o PDF):</label>
+  <input type="file" id="evidencia" accept="image/*,.pdf">
+
+  <button type="submit">Guardar Desviación</button>
+</form>
+
+<!-- REGISTROS -->
+<section>
+  <h3>Registro de Desviaciones</h3>
+  <button onclick="exportarCSV()">Exportar a Excel (CSV)</button>
+  <div style="overflow-x:auto;">
+    <table id="tablaRegistros">
+      <thead>
+        <tr>
+          <th>ID</th><th>Fecha detección</th><th>Área</th><th>Desviación</th><th>Riesgo</th>
+          <th>Responsable</th><th>Fecha notificación</th><th>Días transcurridos</th>
+          <!-- Meses -->
+          <th>Ene</th><th>Feb</th><th>Mar</th><th>Abr</th><th>May</th><th>Jun</th>
+          <th>Jul</th><th>Ago</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dic</th>
+          <th>Alerta</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- MATRIZ DE ESTADOS -->
+<section>
+  <h3>Matriz de Estados</h3>
+  <table class="matriz">
+    <thead>
+      <tr><th>Código</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>ENG</td><td>EN GESTION</td></tr>
+      <tr><td>PEN</td><td>PENDIENTE</td></tr>
+      <tr><td>CER</td><td>CERRADO</td></tr>
+      <tr><td>AVA</td><td>APORTANDO AVANCES</td></tr>
+      <tr><td>SIN</td><td>SIN GESTION</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- VISTA PREVIA CORREO -->
+<section>
+  <h3>Vista Previa del Correo de Notificación</h3>
+  <label>Seleccione la desviación:</label>
+  <select id="selectorDesviacion"></select>
+  <button onclick="mostrarCorreo()">Generar Vista Previa</button>
+  <div id="vistaCorreo" class="resumen hidden"></div>
+</section>
+
+<!-- RESUMEN ESTRATEGICO -->
+<section>
+  <h3>Resumen Estratégico</h3>
+  <div id="resumenTexto" class="resumen"></div>
+  <canvas id="graficoRiesgo" width="400" height="200"></canvas>
+  <canvas id="graficoArea" width="400" height="200"></canvas>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const form = document.getElementById('formDesviacion');
+const tabla = document.querySelector('#tablaRegistros tbody');
+const selectorDesviacion = document.getElementById('selectorDesviacion');
+const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const estados = ['EN GESTION','PENDIENTE','CERRADO','APORTANDO AVANCES','SIN GESTION'];
+const codigos = ['ENG','PEN','CER','AVA','SIN'];
+
+let registros = JSON.parse(localStorage.getItem('desviaciones')) || [];
+let estadosPorRegistro = JSON.parse(localStorage.getItem('estadosPorRegistro')) || {};
+let editandoIndex = null;
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const evidenciaFile = document.getElementById('evidencia').files[0];
+  const reader = new FileReader();
+  reader.onload = function() {
+    const nuevo = {
+      id: editandoIndex !== null ? registros[editandoIndex].id : Date.now(),
+      fechaDeteccion: form.fechaDeteccion.value,
+      area: form.areaResponsable.value,
+      desviacion: form.desviacion.value,
+      descripcion: form.descripcion.value,
+      recomendacion: form.recomendacion.value,
+      riesgo: form.riesgo.value,
+      responsable: form.responsable.value,
+      fechaNotificacion: form.fechaNotificacion.value,
+      evidencia: reader.result || ''
+    };
+
+    if (editandoIndex !== null) {
+      registros[editandoIndex] = nuevo;
+      editandoIndex = null;
+    } else {
+      registros.push(nuevo);
+    }
+
+    localStorage.setItem('desviaciones', JSON.stringify(registros));
+    form.reset();
+    renderTabla();
+    renderSelector();
+    renderResumen();
+  };
+  if(evidenciaFile) reader.readAsDataURL(evidenciaFile); else reader.onload();
+});
+
+function diasTranscurridos(fecha) {
+  const hoy = new Date();
+  const notif = new Date(fecha);
+  const diff = Math.floor((hoy - notif) / (1000*60*60*24));
+  return diff >= 0 ? diff : 0;
+}
+
+function renderTabla() {
+  tabla.innerHTML = '';
+  registros.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td>${r.fechaDeteccion}</td>
+      <td>${r.area}</td>
+      <td>${r.desviacion}</td>
+      <td>${r.riesgo}</td>
+      <td>${r.responsable}</td>
+      <td>${r.fechaNotificacion}</td>
+      <td>${diasTranscurridos(r.fechaNotificacion)}</td>
+    `;
+
+    // Meses: mostrar solo el código y color
+    meses.forEach((mes, mIndex) => {
+      const key = `${r.id}-${mIndex}`;
+      const estadoActual = estadosPorRegistro[key] || '';
+      const codigo = codigos[estados.indexOf(estadoActual)] || '';
+
+      const td = document.createElement('td');
+      td.className = codigo; // color
+      td.textContent = codigo; // código visible
+      td.style.cursor = 'pointer';
+      td.title = estadoActual; // tooltip con estado completo
+      td.onclick = () => cambiarEstado(r.id, mIndex, td);
+      tr.appendChild(td);
+    });
+
+    // Alerta
+    const mesesSinGestion = meses.filter((_, mIndex) => estadosPorRegistro[`${r.id}-${mIndex}`] === 'SIN GESTION').length;
+    const tdAlerta = document.createElement('td');
+    if (mesesSinGestion >= 2) {
+      tdAlerta.textContent = '⚠️ Más de 2 meses sin gestión';
+      tdAlerta.classList.add('alerta');
+    } else {
+      tdAlerta.textContent = '';
+    }
+    tr.appendChild(tdAlerta);
+
+    // Acciones
+    const tdAcciones = document.createElement('td');
+    tdAcciones.innerHTML = `
+      <button onclick="editarRegistro(${i})">Editar</button>
+      <button onclick="eliminarRegistro(${i})">Eliminar</button>
+    `;
+    tr.appendChild(tdAcciones);
+
+    tabla.appendChild(tr);
+  });
+}
+
+function cambiarEstado(id, mIndex, td) {
+  const key = `${id}-${mIndex}`;
+  const actual = estadosPorRegistro[key] || '';
+  const idx = (estados.indexOf(actual) + 1) % estados.length;
+  const nuevo = estados[idx];
+  estadosPorRegistro[key] = nuevo;
+  localStorage.setItem('estadosPorRegistro', JSON.stringify(estadosPorRegistro));
+  renderTabla();
+}
+
+function editarRegistro(i) {
+  const r = registros[i];
+  if(!r) return;
+  editandoIndex = i;
+  form.fechaDeteccion.value = r.fechaDeteccion;
+  form.areaResponsable.value = r.area;
+  form.desviacion.value = r.desviacion;
+  form.descripcion.value = r.descripcion;
+  form.recomendacion.value = r.recomendacion;
+  form.riesgo.value = r.riesgo;
+  form.responsable.value = r.responsable;
+  form.fechaNotificacion.value = r.fechaNotificacion;
+}
+
+function eliminarRegistro(i) {
+  if(confirm('¿Eliminar este registro?')) {
+    const id = registros[i].id;
+    registros.splice(i,1);
+    // Limpiar estados asociados
+    for (let key in estadosPorRegistro) {
+      if (key.startsWith(`${id}-`)) delete estadosPorRegistro[key];
+    }
+    localStorage.setItem('desviaciones', JSON.stringify(registros));
+    localStorage.setItem('estadosPorRegistro', JSON.stringify(estadosPorRegistro));
+    renderTabla();
+    renderSelector();
+    renderResumen();
+  }
+}
+
+function renderSelector() {
+  selectorDesviacion.innerHTML = '';
+  registros.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = `${r.id} - ${r.desviacion}`;
+    selectorDesviacion.appendChild(opt);
+  });
+}
+
+function mostrarCorreo() {
+  const id = selectorDesviacion.value;
+  const r = registros.find(x => x.id == id);
+  if (!r) return alert('Seleccione una desviación.');
+  const dias = diasTranscurridos(r.fechaNotificacion);
+  const asunto = `Desviación detectada: ${r.desviacion}`;
+  const correo = `
+    <strong>Asunto:</strong> ${asunto}<br><br>
+    <strong>Fecha de Detección:</strong> ${r.fechaDeteccion}<br>
+    <strong>Área Responsable:</strong> ${r.area}<br>
+    <strong>Desviación:</strong> ${r.desviacion}<br>
+    <strong>Descripción:</strong> ${r.descripcion}<br>
+    <strong>Recomendación:</strong> ${r.recomendacion}<br>
+    <strong>Riesgo:</strong> ${r.riesgo}<br>
+    <strong>Responsable:</strong> ${r.responsable}<br>
+    <strong>Fecha de Notificación:</strong> ${r.fechaNotificacion}<br>
+    <strong>Días transcurridos hasta hoy:</strong> ${dias}<br><br>
+    <strong>Por medio del presente, se le informa que ha sido asignado/a como responsable para la atención de la desviación notificada recientemente.</strong><br>
+    El propósito de esta asignación es realizar el seguimiento mensual correspondiente, con el fin de asegurar una gestión adecuada y oportuna de la situación.<br>
+    En caso de que usted no sea la persona responsable de atender esta desviación, le agradecemos responder a este correo indicando quién sería el contacto adecuado para proceder con la notificación formal.<br>
+    Agradecemos su colaboración y quedamos atentos a cualquier comentario.
+  `;
+  document.getElementById('vistaCorreo').innerHTML = correo;
+  document.getElementById('vistaCorreo').classList.remove('hidden');
+}
+
+function exportarCSV() {
+  let csv = 'ID,Fecha detección,Área,Desviación,Riesgo,Responsable,Fecha notificación,Días transcurridos';
+  meses.forEach(m=>csv+=','+m);
+  csv+=',Alerta\n';
+  registros.forEach(r => {
+    csv += `${r.id},${r.fechaDeteccion},${r.area},${r.desviacion},${r.riesgo},${r.responsable},${r.fechaNotificacion},${diasTranscurridos(r.fechaNotificacion)}`;
+    meses.forEach((_, mIndex) => {
+      const key = `${r.id}-${mIndex}`;
+      const estado = estadosPorRegistro[key] || '';
+      const codigo = codigos[estados.indexOf(estado)] || '';
+      csv += ',' + codigo;
+    });
+    const mesesSinGestion = meses.filter((_, mIndex) => estadosPorRegistro[`${r.id}-${mIndex}`] === 'SIN GESTION').length;
+    csv += ',' + (mesesSinGestion >= 2 ? 'ALERTA' : '') + '\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'desviaciones_codigo_visual.csv';
+  a.click();
+}
+
+function renderResumen() {
+  const total = registros.length;
+  const alto = registros.filter(r=>r.riesgo==='ALTO').length;
+  const medio = registros.filter(r=>r.riesgo==='MEDIO').length;
+  const bajo = registros.filter(r=>r.riesgo==='BAJO').length;
+  const promedioDias = total ? (registros.reduce((s,r)=>s+diasTranscurridos(r.fechaNotificacion),0)/total).toFixed(1) : 0;
+
+  // Desglose por área
+  const porArea = {};
+  registros.forEach(r => {
+    porArea[r.area] = (porArea[r.area] || 0) + 1;
+  });
+
+  let html = `
+    <strong>Total de desviaciones registradas:</strong> ${total}<br>
+    <strong>Riesgo ALTO:</strong> ${alto}<br>
+    <strong>Riesgo MEDIO:</strong> ${medio}<br>
+    <strong>Riesgo BAJO:</strong> ${bajo}<br>
+    <strong>Promedio de días transcurridos:</strong> ${promedioDias}<br>
+    <strong>Desglose por área:</strong><ul>
+  `;
+  for (let area in porArea) {
+    html += `<li>${area}: ${porArea[area]}</li>`;
+  }
+  html += `</ul>`;
+  document.getElementById('resumenTexto').innerHTML = html;
+
+  // Gráfico de riesgos
+  const ctx1 = document.getElementById('graficoRiesgo').getContext('2d');
+  new Chart(ctx1, {
+    type: 'doughnut',
+    data: {
+      labels: ['ALTO', 'MEDIO', 'BAJO'],
+      datasets: [{
+        data: [alto, medio, bajo],
+        backgroundColor: ['#FF3333', '#FFCC00', '#33AA33']
+      }]
+    },
+    options: { plugins: { title: { display: true, text: 'Distribución por Riesgo' } } }
+  });
+
+  // Gráfico por área
+  const ctx2 = document.getElementById('graficoArea').getContext('2d');
+  new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(porArea),
+      datasets: [{
+        label: 'Desviaciones por área',
+        data: Object.values(porArea),
+        backgroundColor: '#0078d4'
+      }]
+    },
+    options: { plugins: { title: { display: true, text: 'Desviaciones por Área Responsable' } } }
+  });
+}
+
+// Inicializar
+renderTabla();
+renderSelector();
+renderResumen();
+</script>
+
+</body>
+</html>
